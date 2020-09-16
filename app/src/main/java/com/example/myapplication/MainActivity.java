@@ -15,23 +15,36 @@ import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.net.MalformedURLException;
 import java.net.URL;
+
+import javax.net.ssl.HttpsURLConnection;
 
 public class MainActivity extends AppCompatActivity {
     String ipDevice;
     TextView tv;
     ImageView iv;
+    EditText edt;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         tv = findViewById(R.id.textView);
         iv = findViewById(R.id.imageView);
+        edt = findViewById(R.id.edtCEP);
         NotificacaoConexao nc=new NotificacaoConexao();
     }
 
@@ -40,10 +53,22 @@ public class MainActivity extends AppCompatActivity {
         if (estaWifiConectado()){
             // Se o Wifi estiver conectado tentarei ligar o servidor
             tv.setText("Wifi conectado em: "+ipDevice);
-            baixarImagem(); //Erro pq usa rede na Thread Main
-            baixarImagemThreads(); // Baixa a Imagem com Threads
-            baixarImagemEColocarNaView();//Erro ao acessar a View por outra Thread
-            baixarImagemEColocarNaViewII();//Finalmente
+            //baixarImagem(); //Erro pq usa rede na Thread Main
+            //baixarImagemThreads(); // Baixa a Imagem com Threads
+           // baixarImagemEColocarNaView();//Erro ao acessar a View por outra Thread
+          //  baixarImagemEColocarNaViewII();//Finalmente
+
+            Thread t = new Thread(
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                           // executarACalculadora();
+                            transformarCEP();
+                        }
+                    }
+            );
+            t.start();
+
         }
         else{
             String texto = "Macho, liga o Wifi";
@@ -51,6 +76,122 @@ public class MainActivity extends AppCompatActivity {
             Toast toast = Toast.makeText(this, texto,duracao);
             toast.show();
         }
+
+    }
+
+    private void transformarCEP() {
+
+        //https://viacep.com.br/ws/60010020/json/
+
+
+        String CEP= edt.getText().toString();
+                //"6001002000";
+
+        Log.v("PMD","CEP:"+CEP);
+        try {
+            URL url = new URL ("https://viacep.com.br/ws/"+CEP+"/json/");
+            HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
+            conn.setReadTimeout(10000);
+            conn.setConnectTimeout(15000);
+            conn.setRequestMethod("GET");
+            conn.setDoInput(true); //Vou ler dados?
+            conn.connect();
+
+
+            String result[] = new String[1];
+            int responseCode = conn.getResponseCode();
+            if (responseCode == HttpsURLConnection.HTTP_OK){
+                BufferedReader br = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), "utf-8"));
+                StringBuilder response = new StringBuilder();
+                String responseLine = null;
+                while ((responseLine = br.readLine()) != null) {
+                    response.append(responseLine.trim());
+                }
+                result[0] = response.toString();
+              //  Log.v ("PDM","Resultado:"+result[0]);
+
+                JSONObject respostaJSON = new JSONObject(result[0]);
+
+                final String loc = respostaJSON.getString("logradouro");
+                String cidade = respostaJSON.getString("localidade");
+
+                Log.v ("PDM","Esse é o CEP da rua "+loc+" da cidade "+cidade);
+
+                tv.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        tv.setText(loc);
+                    }
+                });
+
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
+    }
+
+
+
+
+
+    private void executarACalculadora() {
+
+        //https://double-nirvana-273602.appspot.com/?hl=pt-BR
+
+
+
+        int oper1,oper2,operacao;
+        oper1 = 14;
+        oper2 = 22;
+        operacao= 1;
+
+        try {
+            URL url = new URL ("https://double-nirvana-273602.appspot.com/?hl=pt-BR");
+            HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
+            conn.setReadTimeout(10000);
+            conn.setConnectTimeout(15000);
+            conn.setRequestMethod("POST");
+            conn.setDoInput(true); //Vou ler dados?
+            conn.setDoOutput(true); //Vou Enviar dados?
+
+            //Criar objetos de comunicação em Java
+
+            OutputStream os = conn.getOutputStream();
+            BufferedWriter writer = new BufferedWriter( new OutputStreamWriter(os, "UTF-8"));
+            writer.write("oper1="+oper1+"&oper2="+oper2+"&operacao="+operacao);
+            writer.flush();
+            writer.close();
+            os.close();
+
+            String result[] = new String[1];
+            int responseCode = conn.getResponseCode();
+            if (responseCode == HttpsURLConnection.HTTP_OK){
+                BufferedReader br = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), "utf-8"));
+                StringBuilder response = new StringBuilder();
+                String responseLine = null;
+                while ((responseLine = br.readLine()) != null) {
+                    response.append(responseLine.trim());
+                }
+                result[0] = response.toString();
+                Log.v ("PDM","Resultado:"+result[0]);
+
+            }
+
+
+
+
+
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
 
     }
 
@@ -83,6 +224,7 @@ public class MainActivity extends AppCompatActivity {
             public void run() {
                 final Bitmap b= loadImageFromNetwork("http://pudim.com.br/pudim.jpg");
                 Log.v("PDM", "Imagem baixada com "+ b.getByteCount()+" bytes");
+
                 try {
                     iv.post(new Runnable(){
                         @Override
